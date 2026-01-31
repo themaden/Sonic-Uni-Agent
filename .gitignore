@@ -1,1 +1,4 @@
 contracts-eth/lib/
+build/
+lib/
+.DS_Store
