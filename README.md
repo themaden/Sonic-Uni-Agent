@@ -30,6 +30,24 @@ The project follows a **Modular Monolith** architecture to ensure scalability an
 - Foundry (Forge)
 - Nargo (Noir)
 
+
+## 🚧 Development Status (HackMoney Sprint)
+
+| Module | Status | Description |
+|--------|--------|-------------|
+| **Smart Contracts (ETH)** | ✅ Completed | Uniswap v4 Hook skeleton & interface setup. |
+| **Smart Contracts (Sui)** | ✅ Completed | Move gateway for intent emission & burning. |
+| **Backend (Go)** | ⏳ Pending | Orchestrator & SDK integrations (Next Step). |
+| **ZK Circuits (Noir)** | ⏳ Pending | Voice authentication circuits. |
+| **Frontend** | ⏳ Pending | UI & Wallet connection. |
+
+## 🧪 Running Tests
+
+**Sui Contracts:**
+```bash
+cd contracts-sui
+sui move build
+
 *(Instructions for running the project will be added as modules are developed)*
 
 ---
