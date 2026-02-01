@@ -44,11 +44,39 @@ The project follows a **Modular Monolith** architecture to ensure scalability an
 ## 🧪 Running Tests
 
 **Sui Contracts:**
+
+
 ```bash
 cd contracts-sui
 sui move build
 
+## 🛡️ Zero-Knowledge Security (Noir) ##
+
+To ensure the integrity of voice commands, we integrated a **Noir ZK-circuit**. This prevents "Voice Spoofing" by verifying that the biometric signature matches the user's private key without exposing sensitive data to the backend.
+
+- **Circuit Path:** `circuits-noir/sonic_auth_circuit`
+- **Constraint:** Pedersen Hash verification of biometric salt.
+
+## 🧠 Brain Logic (OpenAI Integration)
+The orchestrator now uses **GPT-4o** to parse natural language intents.
+- **Input:** "Move 100 USDC from Sui to Sepolia"
+- **Output:** Structured JSON for Cross-Chain bridging and Uniswap v4 execution.
+
+## 🚧 Development Status (Update)
+
+| Module | Status | Description |
+|--------|--------|-------------|
+| **Smart Contracts (ETH)** | ✅ Completed | Uniswap v4 Hook & Sepolia interface. |
+| **Smart Contracts (Sui)** | ✅ Completed | Move gateway for intent emission. |
+| **Backend (Go)** | ✅ Completed | Fiber Server & OpenAI Intent Engine. |
+| **ZK Circuits (Noir)** | ✅ Completed | Voice authentication circuits. |
+| **Frontend** | ⏳ Pending | UI & Wallet connection (Day 5 Focus). |
+
+
 *(Instructions for running the project will be added as modules are developed)*
+
+
+
 
 ---
 *Built with ❤️ for HackMoney 2026*
