@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 
 	"github.com/maden/sonic-uni-agent/internal/config"
+	"github.com/maden/sonic-uni-agent/internal/api/handlers"
 )
 
 // SENIOR NOTE: This is the entry point of the application.
@@ -19,13 +20,15 @@ func main() {
 	cfg := config.LoadConfig()
 
 	// 2. Initialize Fiber App (High performance web framework)
-	app := fiber.New(fiber.Config{
-		AppName: cfg.Appname,
-	})
-
-	// 3. Middlewares 
+	app := fiber.New(fiber.Config{AppName: cfg.Appname})
 	app.Use(logger.New()) 
 	app.Use(cors.New())   
+
+	// 3. Register Routes and Handlers
+	agentHandler := handlers.NewAgentHandler()
+
+	// 4. API Route for Voice Commands
+	api := app.Group("/api/v1")
 
 	// 4. Health Check Route 
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -35,6 +38,7 @@ func main() {
 			"uptime":  "100%",
 		})
 	})
+	api.Post("/chat", agentHandler.HandleVoiceCommand)
 
 	// 5. Start Server
 	log.Printf("🚀 Server starting on port %s", cfg.Port)
