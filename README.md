@@ -46,10 +46,12 @@ The project follows a **Modular Monolith** architecture to ensure scalability an
 **Sui Contracts:**
 
 
-```bash
+
 cd contracts-sui
 sui move build
 --- --------------
+
+
 
 
 ## 🛡️ Zero-Knowledge Security (Noir) ##
@@ -75,6 +77,7 @@ The orchestrator now uses **GPT-4o** to parse natural language intents.
 | **Frontend** | ⏳ Pending | UI & Wallet connection (Day 5 Focus). |
 
 
+```bash
 *(Instructions for running the project will be added as modules are developed)*
 
 
