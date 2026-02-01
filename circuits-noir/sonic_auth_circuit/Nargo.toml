@@ -1,0 +1,7 @@
+[package]
+name = "sonic_auth_circuit"
+type = "bin"
+authors = ["SonicAgentTeam"]
+compiler_version = ">=0.22.0"
+
+[dependencies]
