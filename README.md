@@ -49,6 +49,8 @@ The project follows a **Modular Monolith** architecture to ensure scalability an
 ```bash
 cd contracts-sui
 sui move build
+--- --------------
+
 
 ## 🛡️ Zero-Knowledge Security (Noir) ##
 
