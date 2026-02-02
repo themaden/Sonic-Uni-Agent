@@ -14,7 +14,7 @@ type UserIntent struct {
 	 SourceChain string  `json:"source_chain"` // Example "Sui"
 	 TargetChain string  `json:"target_chain"` // Example "Ethereum"
 	 TokenIn string `json:"token_in"`     // Example: "USDC"
-	 TakenOut string `json:"token_out"`    // Example: "ETH"
+	 TokenOut string `json:"token_out"`    // Example: "ETH"
 	 Amount float64 `json:"amount"`       // 
 	 Confidence float64 `json:"confidence_score"` // AI Score
 	 
@@ -43,7 +43,7 @@ func (s *AIService) ParseCommand(text string) (*UserIntent, error) {
 			SourceChain: "Sui",
 			TargetChain: "Ethereum",
 			TokenIn:     "USDC",
-			TakenOut:    "ETH", //  Score
+			TokenOut:    "ETH", //  Score
 			Amount:      100.0, // Example fixed amount
 			Confidence:  0.98,
 		}, nil
