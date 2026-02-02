@@ -1,157 +1,148 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
-import VoiceInput from '@/src/components/VoiceInput';
+import VoiceInput from '@/src/components/VoiceInput'; // Önceki voice input'u
+import TransactionModal from '@/src/components/TransactionModal';
+import LiveLogs from '@/src/components/LiveLogs';
 import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther } from 'viem';
-import { Loader2, CheckCircle, ExternalLink } from 'lucide-react';
+import { Mic, Radio } from 'lucide-react';
 
 export default function Home() {
   const { isConnected } = useAccount();
   const [intent, setIntent] = useState<any>(null);
+  const [status, setStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
   
-  // WAGMI Hooks for Blockchain Interaction
-  const { data: hash, isPending, sendTransaction } = useSendTransaction();
-  
-  // Wait for transaction confirmation on-chain
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-    hash,
-  });
+  // WAGMI Hooks
+  const { data: hash, sendTransaction } = useSendTransaction();
+  const { isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
 
-  // Function to trigger the wallet
   const handleExecute = async () => {
-    if (!intent) return;
-
-    // SIMULATION: In a real scenario, we would call the Smart Contract function.
-    // For the demo, we send a small amount of ETH to simulate the "Bridge Fee" or "Swap".
+    // Demo Transaction
     sendTransaction({
-      to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', // Test Account (or Contract Address)
-      value: parseEther('0.0001'), // 0.0001 ETH Cost
+      to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', 
+      value: parseEther('0.0001'), 
     });
+    setIntent(null); // Modalı kapat
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center pt-24 bg-black text-white relative overflow-hidden px-4">
+    <main className="min-h-screen bg-sonic-dark text-white relative overflow-hidden selection:bg-sonic-cyan selection:text-black">
       
-      {/* Background FX */}
-      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-black to-black -z-10"></div>
+      {/* 1. Grid Arka Plan (Resimdeki gibi) */}
+      <div className="absolute inset-0 bg-[size:40px_40px] bg-grid-pattern opacity-[0.03] pointer-events-none"></div>
+      <div className="absolute inset-0 bg-cyber-gradient pointer-events-none"></div>
 
       {/* Header */}
-      <div className="text-center space-y-4 mb-10 z-10">
-        <h1 className="text-6xl md:text-7xl font-extrabold bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 text-transparent bg-clip-text">
-          Sonic Uni-Agent
-        </h1>
-        <p className="text-xl text-gray-400">
-          Voice-Controlled Cross-Chain DeFi Orchestrator
-        </p>
-      </div>
+      <header className="flex justify-between items-center p-6 relative z-10 border-b border-white/5">
+        <div className="flex items-center gap-3">
+           <div className="p-2 bg-sonic-cyan/10 rounded border border-sonic-cyan/20">
+              <Radio className="text-sonic-cyan animate-pulse" size={20} />
+           </div>
+           <div>
+              <h1 className="font-bold tracking-[0.2em] text-lg text-white">SONIC_UNI_AGENT</h1>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest">Premium Voice Interface</p>
+           </div>
+        </div>
+        
+        <div className="flex items-center gap-4">
+            <div className="hidden md:flex items-center gap-2 text-xs font-mono text-sonic-cyan">
+                <span className="w-2 h-2 bg-sonic-cyan rounded-full animate-ping"></span>
+                SYSTEM ONLINE
+            </div>
+            <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
+        </div>
+      </header>
 
-      {/* Wallet Button */}
-      <div className="mb-12 scale-110">
-        <ConnectButton label="Connect Wallet to Start" />
-      </div>
+      {/* Ana İçerik */}
+      <div className="flex flex-col items-center justify-center min-h-[70vh] relative z-10">
+        
+        {isConnected ? (
+          <>
+            {/* Durum Göstergesi */}
+            <div className="mb-12">
+               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-900/20 border border-red-500/30 text-red-400 text-xs font-mono tracking-widest uppercase">
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  Listening Mode Active
+               </div>
+            </div>
 
-      {isConnected ? (
-        <div className="w-full max-w-3xl animate-in fade-in slide-in-from-bottom-10 duration-700">
-            
-            {/* 1. MIKROFON (İşlem yapılmadıysa göster) */}
-            {!intent && !hash && (
-                <VoiceInput onIntentReady={(data) => setIntent(data)} />
-            )}
-
-            {/* 2. INTENT KARTI (AI Onayı) */}
-            {intent && !hash && (
-                <div className="bg-gray-900/80 border border-gray-700 p-8 rounded-3xl backdrop-blur-xl shadow-2xl">
-                    <h2 className="text-2xl font-bold mb-6 text-green-400 flex items-center gap-2">
-                        <span className="animate-pulse">●</span> AI Agent Plan Prepared
-                    </h2>
+            {/* MİKROFON MERKEZİ */}
+            {!intent && (
+                <div className="relative group cursor-pointer" onClick={() => setStatus('listening')}>
+                    {/* Glow Efektleri */}
+                    <div className="absolute -inset-10 bg-sonic-cyan/20 rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
+                    <div className="absolute -inset-1 bg-gradient-to-b from-sonic-cyan to-sonic-purple rounded-full opacity-50 blur"></div>
                     
-                    <div className="grid grid-cols-2 gap-4 text-left mb-8">
-                        <div className="p-4 bg-black/40 rounded-xl">
-                            <p className="text-gray-500 text-sm">Action</p>
-                            <p className="text-xl font-mono text-white">{intent.action}</p>
-                        </div>
-                        <div className="p-4 bg-black/40 rounded-xl">
-                            <p className="text-gray-500 text-sm">Route</p>
-                            <p className="text-xl font-mono text-white">{intent.source_chain} ➝ {intent.target_chain}</p>
-                        </div>
-                        <div className="p-4 bg-black/40 rounded-xl">
-                            <p className="text-gray-500 text-sm">Amount</p>
-                            <p className="text-xl font-mono text-yellow-400">{intent.amount} {intent.token_in}</p>
-                        </div>
-                        <div className="p-4 bg-black/40 rounded-xl border border-green-900/50">
-                            <p className="text-gray-500 text-sm">Fees (Est.)</p>
-                            <p className="text-xl font-mono text-green-400">0.0001 ETH</p>
-                        </div>
+                    {/* Asıl Daire */}
+                    <div className="relative w-32 h-32 bg-gray-900 rounded-full border border-gray-700 flex items-center justify-center shadow-2xl transition-transform transform group-hover:scale-105">
+                        <Mic className="w-10 h-10 text-white" />
                     </div>
 
-                    <div className="flex gap-4">
-                        <button 
-                            onClick={() => setIntent(null)}
-                            className="flex-1 py-4 rounded-xl bg-gray-800 hover:bg-gray-700 font-bold transition-all"
-                        >
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={handleExecute}
-                            disabled={isPending}
-                            className="flex-1 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 hover:opacity-90 font-bold shadow-lg shadow-blue-900/50 transition-all flex justify-center items-center gap-2"
-                        >
-                            {isPending ? <Loader2 className="animate-spin" /> : "Sign & Execute ⚡️"}
-                        </button>
-                    </div>
+                    {/* Halka Animasyonları (Listening durumunda) */}
+                    {status === 'listening' && (
+                        <>
+                            <div className="absolute inset-0 rounded-full border border-sonic-cyan/30 animate-[ping_2s_linear_infinite]"></div>
+                            <div className="absolute -inset-4 rounded-full border border-sonic-purple/20 animate-[ping_3s_linear_infinite_delay-100]"></div>
+                        </>
+                    )}
                 </div>
             )}
 
-            {/* 3. İŞLEM DURUMU (Transaction Status) */}
-            {hash && (
-                <div className="bg-gray-900/80 border border-blue-900 p-8 rounded-3xl backdrop-blur-xl text-center">
-                    
-                    {isConfirming && (
-                        <div className="space-y-4">
-                            <Loader2 className="w-16 h-16 text-blue-500 animate-spin mx-auto" />
-                            <h2 className="text-2xl font-bold text-white">Processing on Blockchain...</h2>
-                            <p className="text-gray-400">Waiting for block confirmation</p>
-                            <a 
-                                href={`https://sepolia.etherscan.io/tx/${hash}`} 
-                                target="_blank" 
-                                className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 mt-2"
-                            >
-                                View on Etherscan <ExternalLink className="w-4 h-4" />
-                            </a>
-                        </div>
-                    )}
+            {/* Sesli Komut (Yazıya Dökülen) */}
+            <div className="mt-16 text-center space-y-4 max-w-2xl px-4">
+                <h2 className="text-4xl md:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-500 leading-tight">
+                    "Bridge <span className="text-sonic-cyan">100 USDC</span> from <br/> Sui to Sepolia"
+                </h2>
+                <p className="text-sonic-purple/80 font-mono text-sm tracking-[0.3em] uppercase animate-pulse">
+                    ———— Processing Intent ————
+                </p>
+                
+                {/* Geçici Buton (Demo için, normalde ses tetikler) */}
+                <button 
+                    onClick={() => {
+                        setStatus('processing');
+                        setTimeout(() => {
+                            setIntent({
+                                action: 'BRIDGE ASSETS',
+                                source_chain: 'SEPOLIA',
+                                target_chain: 'SUI NET',
+                                amount: 100,
+                                token_in: 'USDC',
+                                original_text: "Bridge 100 USDC from Sepolia to Sui"
+                            });
+                        }, 2000);
+                    }}
+                    className="mt-8 px-6 py-2 border border-gray-700 rounded text-xs text-gray-500 hover:text-white hover:border-white transition"
+                >
+                    [DEBUG: Simulate Voice Command]
+                </button>
+            </div>
 
-                    {isConfirmed && (
-                        <div className="space-y-4 animate-in zoom-in duration-500">
-                            <CheckCircle className="w-20 h-20 text-green-500 mx-auto" />
-                            <h2 className="text-3xl font-bold text-white">Transaction Successful! 🎉</h2>
-                            <p className="text-gray-400">Your assets have been bridged via Sonic Agent.</p>
-                            
-                            <div className="p-4 bg-green-900/20 rounded-xl border border-green-800 mt-4">
-                                <p className="font-mono text-green-300 break-all">{hash}</p>
-                            </div>
-
-                            <button 
-                                onClick={() => { setIntent(null); window.location.reload(); }}
-                                className="mt-6 px-8 py-3 bg-white text-black font-bold rounded-full hover:bg-gray-200"
-                            >
-                                Start New Command
-                            </button>
-                        </div>
-                    )}
-
-                </div>
+            {/* MODAL (Onay Ekranı) */}
+            {intent && (
+                <TransactionModal 
+                    intent={intent}
+                    onConfirm={handleExecute}
+                    onCancel={() => setIntent(null)}
+                />
             )}
 
-        </div>
-      ) : (
-        <div className="mt-8 text-gray-600 animate-pulse">
-            Waiting for wallet connection...
-        </div>
-      )}
+            {/* SAĞ ALT LOG KUTUSU */}
+            <LiveLogs status={status} />
 
+          </>
+        ) : (
+          <div className="text-center space-y-6">
+             <div className="w-20 h-20 mx-auto bg-gray-900 rounded-full flex items-center justify-center border border-gray-800">
+                <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
+             </div>
+             <p className="text-gray-500 tracking-widest uppercase text-sm">Waiting for Neural Link...</p>
+          </div>
+        )}
+
+      </div>
     </main>
   );
 }
