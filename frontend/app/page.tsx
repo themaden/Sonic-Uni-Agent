@@ -1,177 +1,175 @@
 'use client';
 
 import { useState } from 'react';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { useAccount } from 'wagmi';
 import VoiceInput from '@/src/components/VoiceInput';
 import TransactionModal from '@/src/components/TransactionModal';
-import LiveLogs from '@/src/components/LiveLogs';
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from 'wagmi';
-import { parseEther } from 'viem';
-import { Radio, AlertCircle } from 'lucide-react';
+import ConnectWallet from '@/src/components/ConnectWallet';
+import { resolveENSProfile } from '@/src/utils/ens'; // Ensure this path is correct
 
 export default function Home() {
-  const { isConnected } = useAccount();
   const [intent, setIntent] = useState<any>(null);
   const [status, setStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
-  const [errorMsg, setErrorMsg] = useState<string>('');
-  
-  // WAGMI Hooks (Metamask İşlemleri İçin)
-  const { data: hash, sendTransaction } = useSendTransaction();
-  const { isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash });
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // 🧠 BEYİN FONKSİYONU: Sesi Backend'e Gönderir
+  const { address } = useAccount();
+
   const handleVoiceIntent = async (text: string) => {
-    console.log("🚀 Backend'e Gönderiliyor:", text);
+    console.log("🚀 Sending to Backend:", text);
+
+    if (!address) {
+      alert("Please connect your wallet first!");
+      return;
+    }
+
     setErrorMsg('');
     setStatus('processing');
 
     try {
-      // 1. Go Sunucusuna İstek At
+      // 1. Send Request to Go Backend
       const response = await fetch('http://localhost:8080/api/v1/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, address: "0x123..." }) // Kullanıcı adresi
+        body: JSON.stringify({ message: text, address: address })
       });
 
-      // 2. Cevabı Kontrol Et
       if (!response.ok) {
-        throw new Error(`Sunucu Hatası: ${response.status}`);
+        throw new Error(`Server Error: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log("✅ Backend Cevabı:", data);
+      console.log("✅ Backend Response:", data);
 
-      // 3. Modalı Açmak için Veriyi Hazırla
-      // Backend'den gelen veri yapısına göre burayı eşliyoruz
+      // --- ENS INTEGRATION START ---
+      let recipientAddress = data.recipient || '0x...';
+      let recipientAvatar = null;
+      let recipientName = null;
+
+      // Check if the text contains an ENS name (e.g., vitalik.eth)
+      const ensMatch = text.match(/[a-zA-Z0-9-]+\.eth/i);
+
+      if (ensMatch) {
+        const ensName = ensMatch[0];
+        console.log("🔍 ENS Detected:", ensName);
+
+        // Resolve ENS Profile
+        const profile = await resolveENSProfile(ensName);
+
+        if (profile) {
+          console.log("✅ ENS Resolved:", profile);
+          recipientAddress = profile.address;
+          recipientAvatar = profile.avatar; // URL of the avatar
+          recipientName = profile.name;     // e.g., vitalik.eth
+        }
+      }
+      // --- ENS INTEGRATION END ---
+
+      // Prepare Data for Modal
       setIntent({
-        action: 'BRIDGE ASSETS', // Varsayılan başlık
-        source_chain: 'SEPOLIA',
-        target_chain: 'SUI NET',
-        amount: text.match(/\d+/)?.[0] || '100', // Metinden sayıyı bulamazsa 100 koy
-        token_in: 'USDC',
+        action: data.action || 'TRANSFER',
+        source_chain: data.source_chain || 'ETHEREUM',
+        target_chain: data.target_chain || 'ETHEREUM',
+        amount: data.amount || text.match(/\d+/)?.[0] || '1',
+        token_in: data.token_in || 'ETH',
+
+        // ENS / Identity Fields
+        recipient_address: recipientAddress,
+        recipient_avatar: recipientAvatar,
+        recipient_name: recipientName,
+
         original_text: text,
-        // Backend'den gelen gerçek rota verileri varsa buraya eklenebilir
-        ...data 
+        ...data
       });
 
-      setStatus('idle'); // İşlem bitti, modal açılsın
+      setStatus('idle'); // Open Modal
 
     } catch (err: any) {
-      console.error("❌ Hata:", err);
-      setErrorMsg("Backend'e ulaşılamadı! Go sunucusu çalışıyor mu?");
+      console.error("❌ Error:", err);
+      setErrorMsg("Transaction failed. Is the backend running?");
       setStatus('idle');
     }
   };
 
-  const handleExecute = async () => {
-    // Demo Transaction: Metamask'ı tetikler
-    // Gerçekte 'intent' içindeki verilere göre işlem yapılır
-    if (!intent) return;
-    
-    try {
-        sendTransaction({
-          to: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', // Demo Alıcı
-          value: parseEther('0.0001'), 
-        });
-        setIntent(null); // Modalı kapat
-    } catch (e) {
-        console.error("İşlem İptal:", e);
-    }
+  const executeTransaction = () => {
+    alert(`🚀 Executing transaction on blockchain...\nTarget: ${intent.recipient_name || intent.target_chain}`);
+    setIntent(null);
   };
 
   return (
-    <main className="min-h-screen bg-sonic-dark text-white relative overflow-hidden selection:bg-sonic-cyan selection:text-black">
-      
-      {/* Arka Plan Efektleri */}
-      <div className="absolute inset-0 bg-[size:40px_40px] bg-grid-pattern opacity-[0.03] pointer-events-none"></div>
-      <div className="absolute inset-0 bg-cyber-gradient pointer-events-none"></div>
+    <main className="min-h-screen bg-black text-white selection:bg-sonic-cyan selection:text-black font-sans overflow-hidden relative">
 
-      {/* Header */}
-      <header className="flex justify-between items-center p-6 relative z-10 border-b border-white/5">
+      {/* Background Glow */}
+      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-sonic-cyan/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
+
+      {/* Navbar */}
+      <nav className="flex justify-between items-center p-6 relative z-10 border-b border-white/10 backdrop-blur-md">
         <div className="flex items-center gap-3">
-           <div className="p-2 bg-sonic-cyan/10 rounded border border-sonic-cyan/20">
-              <Radio className="text-sonic-cyan animate-pulse" size={20} />
-           </div>
-           <div>
-              <h1 className="font-bold tracking-[0.2em] text-lg text-white">SONIC_UNI_AGENT</h1>
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest">Premium Voice Interface</p>
-           </div>
-        </div>
-        
-        <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 text-xs font-mono text-sonic-cyan">
-                <span className="w-2 h-2 bg-sonic-cyan rounded-full animate-ping"></span>
-                SYSTEM ONLINE
-            </div>
-            <ConnectButton showBalance={false} chainStatus="icon" accountStatus="address" />
-        </div>
-      </header>
-
-      {/* Ana İçerik */}
-      <div className="flex flex-col items-center justify-center min-h-[70vh] relative z-10">
-        
-        {/* Hata Mesajı Göstergesi */}
-        {errorMsg && (
-            <div className="mb-6 p-4 bg-red-900/50 border border-red-500 rounded flex items-center gap-3 text-red-200 animate-pulse">
-                <AlertCircle />
-                <span>{errorMsg}</span>
-            </div>
-        )}
-
-        {isConnected ? (
-          <>
-            {/* Dinleme Durumu */}
-            <div className="mb-8">
-               {status === 'listening' ? (
-                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-900/20 border border-red-500/30 text-red-400 text-xs font-mono tracking-widest uppercase">
-                      <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                      Listening Mode Active
-                   </div>
-               ) : status === 'processing' ? (
-                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-900/20 border border-purple-500/30 text-purple-400 text-xs font-mono tracking-widest uppercase">
-                      <div className="w-2 h-2 bg-purple-500 rounded-full animate-spin"></div>
-                      Processing with AI & ZK...
-                   </div>
-               ) : (
-                   <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-900/20 border border-green-500/30 text-green-400 text-xs font-mono tracking-widest uppercase">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      System Ready
-                   </div>
-               )}
-            </div>
-
-            {/* MİKROFON MERKEZİ */}
-            {!intent && (
-                <VoiceInput 
-                    onIntentDetected={handleVoiceIntent} 
-                    status={status} 
-                    setStatus={setStatus} 
-                />
-            )}
-
-            {/* MODAL (Onay Ekranı) - Veri gelince açılır */}
-            {intent && (
-                <TransactionModal 
-                    intent={intent}
-                    onConfirm={handleExecute}
-                    onCancel={() => setIntent(null)}
-                />
-            )}
-
-            {/* SAĞ ALT LOG KUTUSU */}
-            <LiveLogs status={status} />
-
-          </>
-        ) : (
-          <div className="text-center space-y-6">
-             <div className="w-20 h-20 mx-auto bg-gray-900 rounded-full flex items-center justify-center border border-gray-800 animate-pulse">
-                <div className="w-2 h-2 bg-gray-600 rounded-full"></div>
-             </div>
-             <p className="text-gray-500 tracking-widest uppercase text-sm">Waiting for Neural Link (Connect Wallet)...</p>
+          <div className="w-10 h-10 bg-gradient-to-tr from-sonic-cyan to-blue-600 rounded-lg shadow-[0_0_20px_rgba(0,240,255,0.5)] flex items-center justify-center">
+            <span className="font-bold text-black text-xl">S</span>
           </div>
-        )}
+          <h1 className="text-2xl font-bold tracking-tighter bg-gradient-to-r from-white to-gray-500 bg-clip-text text-transparent">
+            SONIC<span className="text-sonic-cyan">AGENT</span>
+          </h1>
+        </div>
+        <ConnectWallet />
+      </nav>
+
+      {/* Main Content */}
+      <div className="flex flex-col items-center justify-center min-h-[80vh] relative z-10 px-4">
+
+        <div className="text-center mb-12 space-y-4 max-w-2xl">
+          <h2 className="text-5xl md:text-7xl font-extrabold tracking-tight text-white drop-shadow-[0_0_30px_rgba(0,240,255,0.3)]">
+            DeFi at the Speed of <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-sonic-cyan via-blue-400 to-purple-500 animate-pulse">
+              SOUND
+            </span>
+          </h2>
+          <p className="text-gray-400 text-lg md:text-xl font-light">
+            Just speak. We handle the bridge, swap, and execution.
+          </p>
+        </div>
+
+        {/* Voice Input Module */}
+        <div className="w-full max-w-lg relative">
+          <div className="absolute -inset-1 bg-gradient-to-r from-sonic-cyan to-purple-600 rounded-2xl blur opacity-30 animate-tilt"></div>
+          <div className="relative bg-black border border-white/10 rounded-2xl p-8 shadow-2xl">
+            <VoiceInput
+              onIntentDetected={handleVoiceIntent}
+              status={status}
+              setStatus={setStatus}
+            />
+
+            {status === 'processing' && (
+              <div className="mt-4 flex items-center justify-center gap-2 text-sonic-cyan animate-pulse">
+                <div className="w-2 h-2 bg-sonic-cyan rounded-full"></div>
+                <span className="text-sm font-mono uppercase tracking-widest">Processing Intent...</span>
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="mt-4 p-3 bg-red-900/20 border border-red-500/50 rounded text-red-400 text-center text-sm">
+                {errorMsg}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer Badges */}
+        <div className="mt-16 flex gap-6 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
+          <span className="text-xs font-mono text-gray-500 border border-gray-800 px-3 py-1 rounded hover:border-sonic-cyan hover:text-sonic-cyan cursor-default">Powered by YELLOW</span>
+          <span className="text-xs font-mono text-gray-500 border border-gray-800 px-3 py-1 rounded hover:border-blue-400 hover:text-blue-400 cursor-default">Secured by SUI</span>
+          <span className="text-xs font-mono text-gray-500 border border-gray-800 px-3 py-1 rounded hover:border-pink-500 hover:text-pink-500 cursor-default">Hooked on UNISWAP</span>
+        </div>
 
       </div>
+
+      {/* Transaction Modal */}
+      <TransactionModal
+        intent={intent}
+        onConfirm={executeTransaction}
+        onCancel={() => setIntent(null)}
+      />
     </main>
   );
 }

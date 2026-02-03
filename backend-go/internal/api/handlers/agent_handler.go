@@ -27,7 +27,8 @@ func (h *AgentHandler) HandleVoiceCommand(c *fiber.Ctx) error {
 	 
 	 // 1. Retrieve data from the user (JSON body)
 	 type Request struct {
-		 Text string `json:"text"`
+		 Text    string `json:"message"`
+		 Address string `json:"address"`
 	 }
 	 
 	 var req Request
@@ -43,6 +44,8 @@ func (h *AgentHandler) HandleVoiceCommand(c *fiber.Ctx) error {
 			"error": "Could not understand command. Try saying: 'Move USDC from Sui to Ethereum'",
 		})
 	}
+
+	intent.UserAddress = req.Address
 
 	// 3. Respond with extracted intent
 	result := h.executionService.ExecuteIntent(intent)

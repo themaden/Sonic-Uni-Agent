@@ -13,7 +13,7 @@ func NewLiFiService() *LiFiService {
 	return &LiFiService{}
 }
 
-// LI.FI API'den gelen veriyi karşılayan yapı
+// Structure that receives data from LI.FI API
 type LifiQuoteResponse struct {
 	Estimate struct {
 		GasCosts []struct {
@@ -25,32 +25,69 @@ type LifiQuoteResponse struct {
 	} `json:"estimate"`
 }
 
-// 🦎 GERÇEK API FONKSİYONU
-func (s *LiFiService) GetBestQuote(fromChain, toChain, fromToken, toToken string, amount float64) (string, string, error) {
+// 🦎 ACTUAL API FUNCTION
+func (s *LiFiService) GetBestQuote(fromChain, toChain, fromTokenSymbol, toTokenSymbol string, amount float64, fromAddress string) (string, string, error) {
 	
-	// Demo için ETH Transferi Fiyatı Soruyoruz (Her zaman çalışır)
-	// Sepolia (11155111) -> Arbitrum Sepolia (421614)
-	
-	url := "https://li.fi/v1/quote?fromChain=11155111&toChain=421614&fromToken=0x0000000000000000000000000000000000000000&toToken=0x0000000000000000000000000000000000000000&fromAmount=1000000000000000&fromAddress=0x5555555555555555555555555555555555555555"
+    // 1. Token Address Mapping (Mock Database)
+    // Sepolia (11155111) & Arbitrum Sepolia (421614)
+    tokenMap := map[string]string{
+        "ETH":  "0x0000000000000000000000000000000000000000",
+        "USDC": "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", // Sepolia USDC (Example)
+        "SUI":  "0xSuiTokenAddress...", // Not used for EVM LI.FI but good for logic
+    }
 
-	fmt.Printf("🦎 LI.FI Gerçek Sunucusuna Soruluyor: %s\n", url)
+    // Default to ETH if unknown
+    addrTokenIn := tokenMap[fromTokenSymbol]
+    if addrTokenIn == "" { addrTokenIn = tokenMap["ETH"] }
 
-	// API'ye İstek At
+    addrTokenOut := tokenMap[toTokenSymbol]
+    if addrTokenOut == "" { addrTokenOut = tokenMap["ETH"] }
+
+    // chain IDs (Simple mapping for demo)
+    chainMap := map[string]string{
+        "SEPOLIA": "11155111",
+        "ARBITRUM_SEPOLIA": "421614",
+        "ETHEREUM": "1",
+        "OPTIMISM": "10",
+    }
+
+    cID_in := chainMap[fromChain]
+    if cID_in == "" { cID_in = "11155111" } // Default Sepolia
+
+    cID_out := chainMap[toChain]
+    if cID_out == "" { cID_out = "421614" } // Default Arb Sepolia
+
+    // Amount Calculation (Assuming 18 decimals for simplicity in demo)
+    amountWei := fmt.Sprintf("%.0f", amount * 1e18)
+
+    // User Address Default
+    if fromAddress == "" {
+        fromAddress = "0x5555555555555555555555555555555555555555" // Dummy
+    }
+
+	url := fmt.Sprintf(
+        "https://li.fi/v1/quote?fromChain=%s&toChain=%s&fromToken=%s&toToken=%s&fromAmount=%s&fromAddress=%s",
+        cID_in, cID_out, addrTokenIn, addrTokenOut, amountWei, fromAddress,
+    )
+
+	fmt.Printf("🦎 Querying LI.FI Actual Server: %s\n", url)
+
+	// Send Request to API
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Println("⚠️ İnternet Hatası:", err)
+		fmt.Println("⚠️ Internet Error:", err)
 		return "LI.FI_BACKUP_ROUTE", "0.005 ETH", nil
 	}
 	defer resp.Body.Close()
 
-	// Cevabı Oku
+	// Read Response
 	var quote LifiQuoteResponse
 	if err := json.NewDecoder(resp.Body).Decode(&quote); err != nil {
-		fmt.Println("⚠️ JSON Hatası:", err)
+		fmt.Println("⚠️ JSON Error:", err)
 		return "LI.FI_BACKUP_ROUTE", "0.004 ETH", nil
 	}
 
-	// Gaz Ücretini Hesapla
+	// Calculate Gas Fee
 	totalGasUSD := 0.0
 	for _, cost := range quote.Estimate.GasCosts {
 		if price, err := strconv.ParseFloat(cost.Token.PriceUSD, 64); err == nil {
@@ -60,12 +97,12 @@ func (s *LiFiService) GetBestQuote(fromChain, toChain, fromToken, toToken string
 		}
 	}
 
-	// Sonucu Formatla
+	// Format Result
 	gasDisplay := fmt.Sprintf("~$%.4f USD", totalGasUSD)
 	if totalGasUSD == 0 {
 		gasDisplay = "0.002 ETH"
 	}
 
-	fmt.Printf("✅ LI.FI'dan Gerçek Fiyat Geldi: %s\n", gasDisplay)
+	fmt.Printf("✅ Real Price Received from LI.FI: %s\n", gasDisplay)
 	return "LI.FI_SMART_ROUTE", gasDisplay, nil
 }

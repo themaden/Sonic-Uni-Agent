@@ -2,20 +2,20 @@ import type { Config } from 'tailwindcss';
 
 const config: Config = {
 
-    content: [
-        "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
-        "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
-       "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-    ],
-   theme: {
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
     extend: {
       colors: {
         sonic: {
           dark: "#050b14",     // 
           card: "#0a1122",     // 
-          cyan: "#00f0ff",      
-          purple: "#bc13fe",   
-          border: "#1e293b",   
+          cyan: "#00f0ff",
+          purple: "#bc13fe",
+          border: "#1e293b",
         }
       },
       backgroundImage: {
@@ -27,7 +27,7 @@ const config: Config = {
         'scanline': 'scanline 2s linear infinite',
       },
       fontFamily: {
-        mono: ['var(--font-geist-mono)', 'monospace'], // Terminal için
+        mono: ['var(--font-geist-mono)', 'monospace'], // For Terminal
       }
     },
   },

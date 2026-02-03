@@ -18,7 +18,7 @@ func NewExecutionService() *ExecutionService {
 func (s *ExecutionService) ExecuteIntent(intent *UserIntent) map[string]interface{} {
 	fmt.Printf("🚀 Executing Intent: %s on %s\n", intent.Action, intent.SourceChain)
 
-	// Basit bir switch case ile işlemi yönlendir
+	// Direct the operation with a simple switch case
 	switch intent.Action {
 	case "SWAP", "BRIDGE":
 		// LI.FI Provider Kullan
@@ -28,6 +28,7 @@ func (s *ExecutionService) ExecuteIntent(intent *UserIntent) map[string]interfac
 			intent.TokenIn,
 			intent.TokenOut,
 			intent.Amount,
+			intent.UserAddress,
 		)
 
 		if err != nil {

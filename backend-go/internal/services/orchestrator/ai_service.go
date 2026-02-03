@@ -22,7 +22,7 @@ func NewAIService() *AIService {
 	}
 }
 
-// DeepSeek/OpenAI İstek Modelleri
+// DeepSeek/OpenAI Request Models
 type OpenAIChatRequest struct {
 	Model    string    `json:"model"`
 	Messages []Message `json:"messages"`
@@ -30,7 +30,7 @@ type OpenAIChatRequest struct {
 
 type Message struct {
 	Role    string `json:"role"`
-	// DİKKAT: `omitempty` kaldırdık! Boş olsa bile "content": "" olarak gitmeli.
+	// ATTENTION: Removed `omitempty`! Even if empty, it should go as "content": "".
 	Content string `json:"content"` 
 }
 
@@ -41,6 +41,7 @@ type UserIntent struct {
 	TokenIn     string  `json:"token_in"`
 	TokenOut    string  `json:"token_out"`
 	Amount      float64 `json:"amount"` 
+    UserAddress string  `json:"user_address"`
 }
 
 func (s *AIService) ParseCommand(text string) (*UserIntent, error) {
@@ -77,7 +78,7 @@ func (s *AIService) ParseCommand(text string) (*UserIntent, error) {
 		SourceChain: getString("source_chain"),
 		TargetChain: getString("target_chain"),
 		TokenIn:     getString("token_in"),
-		TokenOut:    getString("token_in"), // Usually same for simple bridge/swap unless specified
+		TokenOut:    getString("token_in"), // Usually same for simple bridge/swap unless specified Tune
 		Amount:      getFloat("amount"),
 	}, nil
 }
@@ -90,17 +91,17 @@ type OpenAIResponse struct {
 
 func (s *AIService) AnalyzeIntent(userPrompt string) (map[string]interface{}, error) {
 	
-	// 🛡️ 1. KORUMA KALKANI: BOŞ MESAJ KONTROLÜ
-	// Eğer kullanıcı hiçbir şey demediyse veya boşluk gönderdiyse işlem yapma.
+	// 🛡️ 1. PROTECTION SHIELD: EMPTY MESSAGE CHECK
+	// If user said nothing or sent spaces, do not process.
 	if len(strings.TrimSpace(userPrompt)) < 2 {
-		fmt.Println("⚠️ Uyarı: Boş mesaj geldi, AI çağrısı iptal edildi.")
-		// Varsayılan boş bir JSON dönelim ki frontend patlamasın
+		fmt.Println("⚠️ Warning: Empty message received, AI call cancelled.")
+		// Return a default empty JSON so frontend doesn't crash
 		return map[string]interface{}{
-			"error": "Lütfen bir komut söyleyin.",
+			"error": "Please say a command.",
 		}, nil
 	}
 
-	// DeepSeek Sistem Mesajı (Prompt Engineering)
+	// DeepSeek System Message (Prompt Engineering)
 	systemPrompt := `
 	You are Sonic Uni-Agent, a DeFi voice assistant.
 	Analyze the user's intent and return a JSON object.
@@ -149,7 +150,7 @@ func (s *AIService) AnalyzeIntent(userPrompt string) (map[string]interface{}, er
 	}
 	defer resp.Body.Close()
 
-	// Yanıtı Oku
+	// Read Response
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
@@ -163,21 +164,21 @@ func (s *AIService) AnalyzeIntent(userPrompt string) (map[string]interface{}, er
 	}
 
 	if len(aiResponse.Choices) == 0 {
-		return nil, fmt.Errorf("AI boş yanıt döndü")
+		return nil, fmt.Errorf("AI returned an empty response")
 	}
 
-	// Gelen string JSON'ı map'e çevir (Frontend'in anlaması için)
+	// Convert incoming string JSON to map (for Frontend to understand)
 	rawContent := aiResponse.Choices[0].Message.Content
 	
-	// Markdown temizliği (Bazen ```json ... ``` şeklinde döner)
+	// Markdown cleanup (Sometimes returns as ```json ... ```)
 	rawContent = strings.TrimPrefix(rawContent, "```json")
 	rawContent = strings.TrimSuffix(rawContent, "```")
 	rawContent = strings.TrimSpace(rawContent)
 
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(rawContent), &result); err != nil {
-		fmt.Println("⚠️ AI JSON döndürmedi, düz metin geldi:", rawContent)
-		// Fallback (Yedek) Yanıt
+		fmt.Println("⚠️ AI did not return JSON, plain text received:", rawContent)
+		// Fallback Response
 		return map[string]interface{}{
 			"action": "UNKNOWN",
 			"original_text": userPrompt,
