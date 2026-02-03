@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useAccount } from 'wagmi';
+import { useAccount, useSendTransaction } from 'wagmi';
+import { parseEther } from 'viem';
 import VoiceInput from '@/src/components/VoiceInput';
 import TransactionModal from '@/src/components/TransactionModal';
 import ConnectWallet from '@/src/components/ConnectWallet';
@@ -13,6 +14,7 @@ export default function Home() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const { address } = useAccount();
+  const { sendTransaction } = useSendTransaction();
 
   const handleVoiceIntent = async (text: string) => {
     console.log("🚀 Sending to Backend:", text);
@@ -69,7 +71,7 @@ export default function Home() {
         action: data.action || 'TRANSFER',
         source_chain: data.source_chain || 'ETHEREUM',
         target_chain: data.target_chain || 'ETHEREUM',
-        amount: data.amount || text.match(/\d+/)?.[0] || '1',
+        amount: data.amount || text.match(/[0-9]*\.?[0-9]+/)?.[0] || '0.0001',
         token_in: data.token_in || 'ETH',
 
         // ENS / Identity Fields
@@ -91,8 +93,37 @@ export default function Home() {
   };
 
   const executeTransaction = () => {
-    alert(`🚀 Executing transaction on blockchain...\nTarget: ${intent.recipient_name || intent.target_chain}`);
-    setIntent(null);
+    if (!intent) return;
+
+    console.log("🚀 Executing Transaction for:", intent);
+
+    try {
+      const targetAddress = intent.recipient_address !== '0x...'
+        ? intent.recipient_address
+        : "0x000000000000000000000000000000000000dEaD"; // Default Dummy
+
+      const isEth = !intent.token_in || intent.token_in.toUpperCase() === 'ETH';
+      const amountToSend = intent.amount ? intent.amount.toString() : "0";
+
+      sendTransaction({
+        to: targetAddress,
+        value: isEth ? parseEther(amountToSend) : parseEther("0"), // Send 0 if not ETH (demo mode)
+      }, {
+        onSuccess: (hash) => {
+          console.log("Transaction Sent:", hash);
+          alert(`Transaction Sent! Hash: ${hash}`);
+          setIntent(null);
+        },
+        onError: (error) => {
+          console.error("Tx Error:", error);
+          alert("User rejected operation or error occurred.");
+        }
+      });
+
+    } catch (e) {
+      console.error("Execution Error:", e);
+      alert("Failed to initiate transaction.");
+    }
   };
 
   return (

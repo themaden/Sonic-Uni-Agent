@@ -1,42 +1,100 @@
 'use client';
 
-import { useAccount, useConnect, useDisconnect } from 'wagmi';
-import { Wallet } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
 
 export default function ConnectWallet() {
-  const { address, isConnected } = useAccount();
-
-  // Use "injected" connector as a default for Metamask/Browser Wallets
-  // In a real app with RainbowKit properly set up in layout, "ConnectButton" from RainbowKit is better
-  // But here we'll stick to a simple custom button triggering the first available connector
-  const { connectors, connect } = useConnect();
-  const { disconnect } = useDisconnect();
-
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const handleConnect = () => {
-    if (isConnected) {
-      disconnect();
-    } else {
-      const connector = connectors[0]; // Usually Injected (Metamask)
-      connect({ connector });
-    }
-  };
-
-  if (!mounted) return null; // Prevent hydration mismatch
-
   return (
-    <button
-      onClick={handleConnect}
-      className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2 rounded-lg transition-all font-mono text-sm backdrop-blur-md"
-    >
-      <Wallet size={16} className="text-sonic-cyan" />
-      {isConnected && address
-        ? <span className="text-sonic-cyan">{address.slice(0, 6)}...{address.slice(-4)}</span>
-        : "Connect Wallet"
-      }
-    </button>
+    <ConnectButton.Custom>
+      {({
+        account,
+        chain,
+        openAccountModal,
+        openChainModal,
+        openConnectModal,
+        authenticationStatus,
+        mounted,
+      }) => {
+        // Note: If your app doesn't use authentication, you
+        // can remove all 'authenticationStatus' checks
+        const ready = mounted && authenticationStatus !== 'loading';
+        const connected =
+          ready &&
+          account &&
+          chain &&
+          (!authenticationStatus ||
+            authenticationStatus === 'authenticated');
+
+        return (
+          <div
+            {...(!ready && {
+              'aria-hidden': true,
+              'style': {
+                opacity: 0,
+                pointerEvents: 'none',
+                userSelect: 'none',
+              },
+            })}
+          >
+            {(() => {
+              if (!connected) {
+                return (
+                  <button onClick={openConnectModal} type="button" className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-4 py-2 rounded-lg transition-all font-mono text-sm backdrop-blur-md">
+                    Connect Wallet
+                  </button>
+                );
+              }
+
+              if (chain.unsupported) {
+                return (
+                  <button onClick={openChainModal} type="button" className="bg-red-500/20 hover:bg-red-500/30 border border-red-500 text-red-500 px-4 py-2 rounded-lg transition-all font-mono text-sm backdrop-blur-md">
+                    Wrong network
+                  </button>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <button
+                    onClick={openChainModal}
+                    style={{ display: 'flex', alignItems: 'center' }}
+                    type="button"
+                    className="bg-white/10 hover:bg-white/20 border border-white/20 text-white px-3 py-2 rounded-lg transition-all font-mono text-xs backdrop-blur-md"
+                  >
+                    {chain.hasIcon && (
+                      <div
+                        style={{
+                          background: chain.iconBackground,
+                          width: 12,
+                          height: 12,
+                          borderRadius: 999,
+                          overflow: 'hidden',
+                          marginRight: 4,
+                        }}
+                      >
+                        {chain.iconUrl && (
+                          <img
+                            alt={chain.name ?? 'Chain icon'}
+                            src={chain.iconUrl}
+                            style={{ width: 12, height: 12 }}
+                          />
+                        )}
+                      </div>
+                    )}
+                    {chain.name}
+                  </button>
+
+                  <button onClick={openAccountModal} type="button" className="bg-white/10 hover:bg-white/20 border border-white/20 text-sonic-cyan px-4 py-2 rounded-lg transition-all font-mono text-sm backdrop-blur-md">
+                    {account.displayName}
+                    {account.displayBalance
+                      ? ` (${account.displayBalance})`
+                      : ''}
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        );
+      }}
+    </ConnectButton.Custom>
   );
 }

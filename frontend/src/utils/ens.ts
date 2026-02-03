@@ -1,38 +1,36 @@
-//front end/src/utils/ens.ts
-
 // frontend/src/utils/ens.ts
 import { createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
 import { normalize } from 'viem/ens';
 
-// Ethereum Ana Ağına Bağlan (ENS oradadır)
+// Connect to Ethereum Mainnet (where ENS lives)
 const client = createPublicClient({
   chain: mainnet,
   transport: http(),
 });
 
 export async function resolveENSProfile(ensName: string) {
-  // Basit doğrulama: .eth ile bitmiyorsa uğraşma
+  // Simple validation: don't bother if it doesn't end with .eth
   if (!ensName || !ensName.toLowerCase().endsWith('.eth')) return null;
 
   try {
     const normalizedName = normalize(ensName);
-    
-    // 1. Adresi Bul (0x...)
+
+    // 1. Find the address (0x...)
     const address = await client.getEnsAddress({ name: normalizedName });
-    
+
     if (!address) return null;
 
-    // 2. Avatarı (Profil Resmini) Bul
+    // 2. Find the Avatar (Profile Picture)
     const avatar = await client.getEnsAvatar({ name: normalizedName });
 
     return {
       name: ensName,
       address,
-      avatar: avatar || null, // Avatar yoksa null dön
+      avatar: avatar || null, // Return null if no avatar
     };
   } catch (e) {
-    console.error("ENS Çözümleme Hatası:", e);
+    console.error("ENS Resolution Error:", e);
     return null;
   }
 }

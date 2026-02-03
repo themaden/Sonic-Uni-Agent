@@ -19,7 +19,15 @@ export default function VoiceInput({ onIntentDetected, status, setStatus }: Voic
 
   useEffect(() => {
     statusRef.current = status;
-  }, [status]);
+
+    // RE-ACTIVATE MICROPHONE LOOP WHEN BACK TO IDLE
+    if (status === 'idle' && isSystemActive && recognitionRef.current) {
+      try {
+        recognitionRef.current.start();
+        console.log("🎤 Engine Restarted (Idle Mode)");
+      } catch (e) { /* Already running */ }
+    }
+  }, [status, isSystemActive]);
 
   // 🔊 AUDIO EFFECT
   const playSound = (type: 'wake' | 'success') => {
@@ -85,7 +93,7 @@ export default function VoiceInput({ onIntentDetected, status, setStatus }: Voic
         lowerTranscript.includes('hey sonic') ||
         lowerTranscript.includes('sonic') ||
         lowerTranscript.includes('sonik') ||
-        lowerTranscript.includes('sonıc') // Turkish accent support
+        lowerTranscript.includes('sonıc') // Turkish accent support for "Sonic"
       )) {
         playSound('wake');
         setStatus('listening');
