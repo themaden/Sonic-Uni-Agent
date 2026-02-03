@@ -42,29 +42,30 @@ export default function Home() {
       const data = await response.json();
       console.log("✅ Backend Response:", data);
 
-      // --- ENS INTEGRATION START ---
+      // --- RECIPIENT & ENS INTEGRATION START ---
       let recipientAddress = data.recipient || '0x...';
       let recipientAvatar = null;
-      let recipientName = null;
+      let recipientName = data.recipient || null;
 
-      // Check if the text contains an ENS name (e.g., vitalik.eth)
-      const ensMatch = text.match(/[a-zA-Z0-9-]+\.eth/i);
+      // Logic: If recipient looks like an ENS (.eth), try to resolve it
+      const ensMatch = recipientAddress.match(/[a-zA-Z0-9-]+\.eth/i) || text.match(/[a-zA-Z0-9-]+\.eth/i);
 
       if (ensMatch) {
         const ensName = ensMatch[0];
-        console.log("🔍 ENS Detected:", ensName);
+        console.log("🔍 Resolving ENS:", ensName);
 
-        // Resolve ENS Profile
         const profile = await resolveENSProfile(ensName);
-
         if (profile) {
-          console.log("✅ ENS Resolved:", profile);
           recipientAddress = profile.address;
-          recipientAvatar = profile.avatar; // URL of the avatar
-          recipientName = profile.name;     // e.g., vitalik.eth
+          recipientAvatar = profile.avatar;
+          recipientName = profile.name;
         }
+      } else if (recipientAddress.startsWith('0x') && recipientAddress.length === 42) {
+        // If it's a direct address, use it
+        console.log("✅ Direct Address Detected:", recipientAddress);
+        recipientName = recipientAddress.slice(0, 6) + "..." + recipientAddress.slice(-4);
       }
-      // --- ENS INTEGRATION END ---
+      // --- RECIPIENT & ENS INTEGRATION END ---
 
       // Prepare Data for Modal
       setIntent({

@@ -109,6 +109,18 @@ func (s *AIService) AnalyzeIntent(userPrompt string) (map[string]interface{}, er
 	Supported Chains: "SEPOLIA", "SUI NET", "ETHEREUM".
 	Supported Tokens: "USDC", "ETH", "SUI".
 	
+	Example Input: "Send 0.01 ETH to vitalik.eth"
+	Example Output JSON:
+	{
+		"action": "TRANSFER",
+		"source_chain": "SEPOLIA",
+		"target_chain": "SEPOLIA",
+		"amount": "0.01",
+		"token_in": "ETH",
+		"recipient": "vitalik.eth",
+		"original_text": "Send 0.01 ETH to vitalik.eth"
+	}
+
 	Example Input: "Bridge 100 USDC to Sui"
 	Example Output JSON:
 	{
