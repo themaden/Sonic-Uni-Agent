@@ -1,140 +1,145 @@
 'use client';
 
-import { useState, useEffect } from "react";
-import {Mic,Square, Loader2, ArrowRight} from "lucide-react";
-import axios from "axios";
-
-
-declare global {
-     interface Window {
-        
-         webkitSpeechRecognition: any; // Function to run when response comes from the backend
-
-     }
-}
+import { useState, useEffect, useRef } from 'react';
+import { Mic, Radio } from 'lucide-react';
 
 interface VoiceInputProps {
-     
-    onIntentReady: (data: any) => void;
+  onIntentDetected: (text: string) => void;
+  status: 'idle' | 'listening' | 'processing';
+  setStatus: (status: 'idle' | 'listening' | 'processing') => void;
 }
 
-export default function VoiceInput ({ onIntentReady }: VoiceInputProps) {
-     
-    const [isListening, setIsListening] = useState(false);
-    const [transcript, setTranscript] = useState('');
-   const [loading, setLoading] = useState(false);
-   const [recognition, setRecognition] = useState<any>(null);
+export default function VoiceInput({ onIntentDetected, status, setStatus }: VoiceInputProps) {
+  const [transcript, setTranscript] = useState('');
+  
+  // Durumu içeride takip etmek için Ref kullanıyoruz (Takılmayı önler)
+  const statusRef = useRef(status);
+  const recognitionRef = useRef<any>(null);
 
+  // Status her değiştiğinde Ref'i güncelle
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
-
-   useEffect(() => {
-    if (typeof window !== 'undefined' && window.webkitSpeechRecognition) {
-      const r = new window.webkitSpeechRecognition();
-      r.continuous = false;
-      r.interimResults = true;
-      r.lang = 'en-US'; // Demo için İngilizce
-
-      r.onresult = (event: any) => {
-        const text = event.results[0][0].transcript;
-        setTranscript(text);
-      };
-
-      r.onend = () => {
-        setIsListening(false);
-      };
-
-      setRecognition(r);
-    }
-  }, []);
-
-  const toggleListening = () => {
-    if (!recognition) return alert('Browser not supported! Use Chrome.');
-
-    if (isListening) {
-      recognition.stop();
-      setIsListening(false);
-    } else {
-      setTranscript('');
-      recognition.start();
-      setIsListening(true);
-    }
-  };
-
-  const handleAnalyze = async () => {
-    if (!transcript) return;
-    setLoading(true);
-    
+  // 🔊 SES EFEKTİ (BİİP)
+  const playWakeSound = () => {
     try {
-      // 1. Send to the backend (The Go API we wrote yesterday)
-      // NOTE: The backend may not be running on the 8080 yet, we can simulate that. 
-      // For now, let's try the actual connection:
-      const response = await axios.post('http://localhost:8080/api/v1/chat', {
-        text: transcript
-      });
-      
-      console.log("Backend Cevabı:", response.data);
-      onIntentReady(response.data.data); // Send data to the homepage.
-    } catch (error) {
-      console.error("Backend Hatası:", error);
-      alert("Backend bağlantısı yok! Simülasyon moduna geçiliyor...");
-      
-      // FALLBACK (A fake response to prevent the demo from breaking if the backend is down)
-      onIntentReady({
-        action: "CROSS_CHAIN_SWAP",
-        source_chain: "Sui",
-        target_chain: "Ethereum",
-        token_in: "USDC",
-        token_out: "ETH",
-        amount: 100
-      });
-    } finally {
-      setLoading(false);
+      const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } catch (e) { console.error(e); }
+  };
+
+  // 🗣️ KONUŞAN ASİSTAN
+  const speak = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang.includes('en-US'));
+      if (enVoice) utterance.voice = enVoice;
+      window.speechSynthesis.speak(utterance);
     }
   };
+
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true; // Sürekli dinle
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event: any) => {
+        // Son söylenen cümleyi al (continuous modda array uzar, sonuncuyu almalıyız)
+        const lastResultIndex = event.results.length - 1;
+        const currentTranscript = event.results[lastResultIndex][0].transcript;
+        const lowerTranscript = currentTranscript.toLowerCase();
+        
+        setTranscript(currentTranscript);
+
+        // 🚨 1. AŞAMA: WAKE WORD ("Hey Sonic")
+        if (statusRef.current === 'idle' && (lowerTranscript.includes('hey sonic') || lowerTranscript.includes('sonic'))) {
+          playWakeSound(); 
+          setStatus('listening');
+          speak("I'm listening.");
+        }
+
+        // 🚨 2. AŞAMA: KOMUT ALMA
+        if (statusRef.current === 'listening') {
+          // "Hey Sonic" kelimelerini temizle
+          const command = currentTranscript.replace(/hey sonic|sonic/gi, '').trim();
+          
+          // Komut yeterince uzunsa ve cümle bittiyse (isFinal)
+          if (command.length > 5 && event.results[lastResultIndex].isFinal) {
+             playWakeSound();
+             setStatus('processing'); // Durumu güncelle
+             recognition.stop();      // Dinlemeyi durdur
+             onIntentDetected(command); // Backend'e gönder
+             speak("On it.");
+             setTranscript('');
+          }
+        }
+      };
+
+      // Eğer durursa tekrar başlat (Siri gibi hep açık kalsın)
+      recognition.onend = () => {
+        if (statusRef.current !== 'processing') {
+            try { recognition.start(); } catch(e) {}
+        }
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
+    
+    return () => {
+      if (recognitionRef.current) recognitionRef.current.stop();
+    };
+  }, []); // <-- DİKKAT: Dependency array boş [], yani sadece bir kere başlar ve kapanmaz.
 
   return (
-    <div className="flex flex-col items-center gap-6 mt-8 w-full max-w-xl mx-auto">
-      
-      {/* 1.  Speaking Area */}
-      <div className={`relative w-full p-6 rounded-2xl border transition-all duration-300 ${isListening ? 'border-red-500 bg-red-900/10 shadow-[0_0_30px_rgba(239,68,68,0.3)]' : 'border-gray-800 bg-gray-900/50'}`}>
-        
-        <p className="text-2xl text-center font-medium text-gray-200 min-h-[40px]">
-          {transcript || (isListening ? "Listening..." : "Tap microphone & speak...")}
-        </p>
-
-        {/* Wave Animation (Only appears while listening) */}
-        {isListening && (
-            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1 h-4 items-end">
-                <span className="w-1 bg-red-500 animate-[bounce_1s_infinite] h-2"></span>
-                <span className="w-1 bg-red-500 animate-[bounce_1.2s_infinite] h-4"></span>
-                <span className="w-1 bg-red-500 animate-[bounce_0.8s_infinite] h-3"></span>
-            </div>
+    <div className="flex flex-col items-center gap-4">
+      {/* MİKROFON GÖRSELİ */}
+      <div 
+        className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
+          status === 'listening' 
+            ? 'bg-sonic-cyan/20 shadow-[0_0_50px_rgba(0,240,255,0.4)] scale-110 border-2 border-sonic-cyan' 
+            : 'bg-gray-900 border border-gray-800'
+        }`}
+      >
+        <Mic className={`w-10 h-10 ${status === 'listening' ? 'text-sonic-cyan' : 'text-gray-500'}`} />
+        {status === 'listening' && (
+           <div className="absolute inset-0 rounded-full border-4 border-sonic-cyan/30 animate-ping"></div>
         )}
       </div>
 
-      {/* 2. Control Buttons */}
-      <div className="flex gap-4">
-        {/* Microphone Button */}
-        <button 
-            onClick={toggleListening}
-            className={`p-6 rounded-full transition-all duration-300 transform hover:scale-105 ${isListening ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'}`}
-        >
-            {isListening ? <Square className="w-8 h-8 fill-current" /> : <Mic className="w-8 h-8" />}
-        </button>
-
-        {/*Submit Button (Appears only if there is text) */}
-        {transcript && !isListening && (
-            <button 
-                onClick={handleAnalyze}
-                disabled={loading}
-                className="flex items-center gap-2 px-8 py-4 bg-green-600 hover:bg-green-700 rounded-full font-bold text-lg transition-all"
-            >
-                {loading ? <Loader2 className="animate-spin" /> : <>Analyze <ArrowRight /></>}
-            </button>
+      {/* DURUM YAZISI */}
+      <div className="h-8 text-center">
+        {status === 'idle' && (
+          <p className="text-gray-500 text-xs tracking-widest uppercase animate-pulse">Say "Hey Sonic"</p>
+        )}
+        {status === 'listening' && (
+          <p className="text-sonic-cyan text-sm font-mono font-bold">"{transcript || "Listening..."}"</p>
+        )}
+        {status === 'processing' && (
+          <div className="flex items-center gap-2 text-sonic-purple text-xs uppercase tracking-widest">
+            <Radio className="w-4 h-4 animate-spin" />
+            Analyzing Intent...
+          </div>
         )}
       </div>
-
     </div>
   );
-}  
-
+}
