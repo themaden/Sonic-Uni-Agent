@@ -2,3 +2,4 @@ contracts-eth/lib/
 build/
 lib/
 .DS_Store
+OPENAI_API_KEY
