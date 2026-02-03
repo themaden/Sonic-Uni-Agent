@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Mic, Radio } from 'lucide-react';
+import { Mic, Radio, Power } from 'lucide-react';
 
 interface VoiceInputProps {
   onIntentDetected: (text: string) => void;
@@ -11,36 +11,42 @@ interface VoiceInputProps {
 
 export default function VoiceInput({ onIntentDetected, status, setStatus }: VoiceInputProps) {
   const [transcript, setTranscript] = useState('');
-  
-  // Durumu içeride takip etmek için Ref kullanıyoruz (Takılmayı önler)
-  const statusRef = useRef(status);
-  const recognitionRef = useRef<any>(null);
+  const [isSystemActive, setIsSystemActive] = useState(false); // Sistem açık mı?
 
-  // Status her değiştiğinde Ref'i güncelle
+  const recognitionRef = useRef<any>(null);
+  const statusRef = useRef(status);
+  const silenceTimer = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     statusRef.current = status;
   }, [status]);
 
-  // 🔊 SES EFEKTİ (BİİP)
-  const playWakeSound = () => {
+  // 🔊 SES EFEKTİ
+  const playSound = (type: 'wake' | 'success') => {
     try {
       const AudioContext = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
       const ctx = new AudioContext();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.frequency.setValueAtTime(600, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+
+      if (type === 'wake') {
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+      } else {
+        osc.frequency.setValueAtTime(800, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(400, ctx.currentTime + 0.1);
+      }
+
       gain.gain.setValueAtTime(0.1, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
       osc.start();
       osc.stop(ctx.currentTime + 0.15);
-    } catch (e) { console.error(e); }
+    } catch (e) { }
   };
 
-  // 🗣️ KONUŞAN ASİSTAN
+  // 🗣️ KONUŞMA
   const speak = (text: string) => {
     if ('speechSynthesis' in window) {
       window.speechSynthesis.cancel();
@@ -52,87 +58,151 @@ export default function VoiceInput({ onIntentDetected, status, setStatus }: Voic
     }
   };
 
-  useEffect(() => {
+  // 🎤 MİKROFON MOTORU BAŞLAT
+  const initSpeechEngine = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true; // Sürekli dinle
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+    if (!SpeechRecognition) return;
 
-      recognition.onresult = (event: any) => {
-        // Son söylenen cümleyi al (continuous modda array uzar, sonuncuyu almalıyız)
-        const lastResultIndex = event.results.length - 1;
-        const currentTranscript = event.results[lastResultIndex][0].transcript;
-        const lowerTranscript = currentTranscript.toLowerCase();
-        
-        setTranscript(currentTranscript);
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
 
-        // 🚨 1. AŞAMA: WAKE WORD ("Hey Sonic")
-        if (statusRef.current === 'idle' && (lowerTranscript.includes('hey sonic') || lowerTranscript.includes('sonic'))) {
-          playWakeSound(); 
-          setStatus('listening');
-          speak("I'm listening.");
-        }
-
-        // 🚨 2. AŞAMA: KOMUT ALMA
-        if (statusRef.current === 'listening') {
-          // "Hey Sonic" kelimelerini temizle
-          const command = currentTranscript.replace(/hey sonic|sonic/gi, '').trim();
-          
-          // Komut yeterince uzunsa ve cümle bittiyse (isFinal)
-          if (command.length > 5 && event.results[lastResultIndex].isFinal) {
-             playWakeSound();
-             setStatus('processing'); // Durumu güncelle
-             recognition.stop();      // Dinlemeyi durdur
-             onIntentDetected(command); // Backend'e gönder
-             speak("On it.");
-             setTranscript('');
-          }
-        }
-      };
-
-      // Eğer durursa tekrar başlat (Siri gibi hep açık kalsın)
-      recognition.onend = () => {
-        if (statusRef.current !== 'processing') {
-            try { recognition.start(); } catch(e) {}
-        }
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    }
-    
-    return () => {
-      if (recognitionRef.current) recognitionRef.current.stop();
+    recognition.onstart = () => {
+      console.log("🎤 Motor Çalışıyor");
     };
-  }, []); // <-- DİKKAT: Dependency array boş [], yani sadece bir kere başlar ve kapanmaz.
+
+    recognition.onresult = (event: any) => {
+      const lastResultIndex = event.results.length - 1;
+      const currentTranscript = event.results[lastResultIndex][0].transcript;
+      const lowerTranscript = currentTranscript.toLowerCase();
+
+      setTranscript(lowerTranscript);
+
+      // MOD 1: "HEY SONIC" İLE UYANMA
+      // Sadece 'idle' modundaysak ve 'hey sonic' duyarsak
+      if (statusRef.current === 'idle' && (
+        lowerTranscript.includes('hey sonic') ||
+        lowerTranscript.includes('sonic') ||
+        lowerTranscript.includes('sonik') ||
+        lowerTranscript.includes('sonıc') // Turkish accent support
+      )) {
+        playSound('wake');
+        setStatus('listening');
+        speak("Listening.");
+      }
+
+      // MOD 2: KOMUT ALMA
+      // 'listening' modundaysak (ya elle ya sesle açıldıysa)
+      if (statusRef.current === 'listening') {
+        if (silenceTimer.current) clearTimeout(silenceTimer.current);
+
+        const command = currentTranscript.replace(/hey sonic|sonic|sonik|sonıc/gi, '').trim();
+
+        // Sustuktan 1.5 saniye sonra gönder
+        silenceTimer.current = setTimeout(() => {
+          if (command.length > 5) {
+            playSound('success');
+            setStatus('processing');
+            recognition.stop();
+            onIntentDetected(command);
+            speak("On it.");
+            setTranscript('');
+          }
+        }, 1500);
+      }
+    };
+
+    recognition.onend = () => {
+      // Eğer işlem yapmıyorsak motoru hep açık tut (Sürekli Dinle)
+      if (statusRef.current !== 'processing') {
+        try { recognition.start(); } catch (e) { }
+      }
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+    setIsActive(true);
+  };
+
+  // 🔘 BUTONA TIKLANINCA NE OLSUN?
+  const handleMicClick = () => {
+    // 1. Eğer sistem kapalıysa -> Aç ve Dinlemeye Başla
+    if (!isSystemActive) {
+      initSpeechEngine();
+      setIsSystemActive(true);
+
+      // İlk tıklamada hemen "Dinleme Moduna" geçelim mi?
+      // EVET, kullanıcı tıkladıysa konuşmak istiyordur.
+      playSound('wake');
+      setStatus('listening');
+      return;
+    }
+
+    // 2. Eğer sistem zaten açıksa ama bekliyorsa -> Zorla Dinleme Moduna Sok
+    if (status === 'idle') {
+      playSound('wake');
+      setStatus('listening');
+      speak("Listening.");
+    }
+
+    // 3. Eğer zaten dinliyorsa -> Durdur (İptal et gibi)
+    if (status === 'listening') {
+      setStatus('idle');
+      setTranscript('');
+    }
+  };
+
+  const setIsActive = (val: boolean) => setIsSystemActive(val);
 
   return (
-    <div className="flex flex-col items-center gap-4">
-      {/* MİKROFON GÖRSELİ */}
-      <div 
-        className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
-          status === 'listening' 
-            ? 'bg-sonic-cyan/20 shadow-[0_0_50px_rgba(0,240,255,0.4)] scale-110 border-2 border-sonic-cyan' 
-            : 'bg-gray-900 border border-gray-800'
-        }`}
+    <div className="flex flex-col items-center gap-6">
+
+      {/* ANA MİKROFON BUTONU (Hem Gösterge Hem Buton) */}
+      <div
+        onClick={handleMicClick}
+        className={`relative w-28 h-28 rounded-full flex items-center justify-center cursor-pointer transition-all duration-300 ${!isSystemActive
+            ? 'bg-gray-800 border-2 border-gray-600 hover:border-gray-400 opacity-50' // Kapalı
+            : status === 'listening'
+              ? 'bg-sonic-cyan/20 border-4 border-sonic-cyan shadow-[0_0_60px_rgba(0,240,255,0.6)] scale-110' // Dinliyor
+              : 'bg-gray-900 border-2 border-green-500/50 hover:bg-green-500/10' // Açık ama Bekliyor (Hey Sonic Bekliyor)
+          }`}
       >
-        <Mic className={`w-10 h-10 ${status === 'listening' ? 'text-sonic-cyan' : 'text-gray-500'}`} />
-        {status === 'listening' && (
-           <div className="absolute inset-0 rounded-full border-4 border-sonic-cyan/30 animate-ping"></div>
+        {/* İkonlar */}
+        {!isSystemActive ? (
+          <Power className="w-10 h-10 text-gray-400" />
+        ) : (
+          <Mic className={`w-10 h-10 ${status === 'listening' ? 'text-sonic-cyan' : 'text-green-500'}`} />
+        )}
+
+        {/* Animasyonlar */}
+        {isSystemActive && status === 'listening' && (
+          <div className="absolute inset-0 rounded-full border-4 border-sonic-cyan/30 animate-ping"></div>
         )}
       </div>
 
-      {/* DURUM YAZISI */}
-      <div className="h-8 text-center">
-        {status === 'idle' && (
-          <p className="text-gray-500 text-xs tracking-widest uppercase animate-pulse">Say "Hey Sonic"</p>
+      {/* ALT METİN / TALİMAT */}
+      <div className="h-14 text-center flex flex-col items-center justify-center min-w-[300px]">
+        {!isSystemActive && (
+          <p className="text-gray-500 text-sm font-bold uppercase tracking-widest animate-pulse">
+            Tap to Start
+          </p>
         )}
-        {status === 'listening' && (
-          <p className="text-sonic-cyan text-sm font-mono font-bold">"{transcript || "Listening..."}"</p>
+
+        {isSystemActive && status === 'idle' && (
+          <div className="flex flex-col items-center">
+            <p className="text-green-500 text-xs font-bold uppercase tracking-widest mb-1">● ONLINE</p>
+            <p className="text-gray-400 text-sm">Say "Hey Sonic" or Tap</p>
+          </div>
         )}
+
+        {isSystemActive && status === 'listening' && (
+          <>
+            <p className="text-sonic-cyan text-sm font-bold animate-pulse">Listening...</p>
+            <p className="text-white text-lg font-mono mt-1">"{transcript}"</p>
+          </>
+        )}
+
         {status === 'processing' && (
           <div className="flex items-center gap-2 text-sonic-purple text-xs uppercase tracking-widest">
             <Radio className="w-4 h-4 animate-spin" />

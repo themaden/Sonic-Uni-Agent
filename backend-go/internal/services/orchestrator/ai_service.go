@@ -1,90 +1,188 @@
 package orchestrator
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
-
-	openai "github.com/sashabaranov/go-openai"
 )
 
-// UserIntent: Structure representing the user's parsed command
-type UserIntent struct {
-	Action      string  `json:"action"`       // e.g: SWAP, BRIDGE
-	SourceChain string  `json:"source_chain"` // e.g: Sui
-	TargetChain string  `json:"target_chain"` // e.g: Ethereum
-	TokenIn     string  `json:"token_in"`     // e.g: USDC
-	TokenOut    string  `json:"token_out"`    // e.g: ETH
-	Amount      float64 `json:"amount"`
-}
-
 type AIService struct {
-	client *openai.Client
+	apiKey string
+	client *http.Client
 }
 
 func NewAIService() *AIService {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-
-    
-	//
-	config := openai.DefaultConfig(apiKey)
-	config.BaseURL = "https://api.deepseek.com/v1" // DeepSeek API Address
-	
 	return &AIService{
-		client: openai.NewClientWithConfig(config),
+		apiKey: os.Getenv("DEEPSEEK_API_KEY"),
+		client: &http.Client{},
 	}
 }
 
-// ParseCommand: Takes text, queries AI, returns JSON.
+// DeepSeek/OpenAI İstek Modelleri
+type OpenAIChatRequest struct {
+	Model    string    `json:"model"`
+	Messages []Message `json:"messages"`
+}
+
+type Message struct {
+	Role    string `json:"role"`
+	// DİKKAT: `omitempty` kaldırdık! Boş olsa bile "content": "" olarak gitmeli.
+	Content string `json:"content"` 
+}
+
+type UserIntent struct {
+	Action      string  `json:"action"`
+	SourceChain string  `json:"source_chain"`
+	TargetChain string  `json:"target_chain"`
+	TokenIn     string  `json:"token_in"`
+	TokenOut    string  `json:"token_out"`
+	Amount      float64 `json:"amount"` 
+}
+
 func (s *AIService) ParseCommand(text string) (*UserIntent, error) {
-	fmt.Printf("🤖 [AI] Analyzing: %s\n", text)
-
-	// Teach AI its role (Prompt Engineering)
-	systemPrompt := `
-	You are a DeFi Intent Parser for Sonic Agent.
-	Extract the intent from the user's voice command into JSON.
-	
-	Rules:
-	1. Supported Chains: Sui, Ethereum, Sepolia, Optimism, Base.
-	2. Supported Tokens: USDC, ETH, SUI, WBTC.
-	3. Default Amount: If not specified, use 0.
-	
-	Example Input: "Move 100 USDC from Sui to Sepolia"
-	Example Output: {"action": "BRIDGE", "source_chain": "Sui", "target_chain": "Sepolia", "token_in": "USDC", "token_out": "USDC", "amount": 100}
-
-	ONLY return the JSON. No explanation.`
-
-	resp, err := s.client.CreateChatCompletion(
-		context.Background(),
-		openai.ChatCompletionRequest{
-			Model: "deepseek-chat", // Use this instead of GPT-4
-			Messages: []openai.ChatCompletionMessage{
-				{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
-				{Role: openai.ChatMessageRoleUser, Content: text},
-			},
-		},
-	)
-
+	// Call the new map-based method
+	resultMap, err := s.AnalyzeIntent(text)
 	if err != nil {
-		fmt.Printf("❌ OpenAI Error: %v\n", err)
 		return nil, err
 	}
 
-	// Clean the response
-	content := resp.Choices[0].Message.Content
-	// Sometimes AI returns with ```json ... ``` tags, let's clean those
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
+	// Helper to extract string safely
+	getString := func(key string) string {
+		if v, ok := resultMap[key].(string); ok {
+			return v
+		}
+		return ""
+	}
 
-	fmt.Printf("🤖 [AI] Response: %s\n", content)
+    // Helper to extract float safely (handling string numbers too)
+    getFloat := func(key string) float64 {
+        if v, ok := resultMap[key].(float64); ok {
+            return v
+        }
+        if v, ok := resultMap[key].(string); ok {
+            var f float64
+            fmt.Sscanf(v, "%f", &f)
+            return f
+        }
+        return 0
+    }
 
-	var intent UserIntent
-	if err := json.Unmarshal([]byte(content), &intent); err != nil {
+	// Map back to struct for internal service compatibility
+	return &UserIntent{
+		Action:      getString("action"),
+		SourceChain: getString("source_chain"),
+		TargetChain: getString("target_chain"),
+		TokenIn:     getString("token_in"),
+		TokenOut:    getString("token_in"), // Usually same for simple bridge/swap unless specified
+		Amount:      getFloat("amount"),
+	}, nil
+}
+
+type OpenAIResponse struct {
+	Choices []struct {
+		Message Message `json:"message"`
+	} `json:"choices"`
+}
+
+func (s *AIService) AnalyzeIntent(userPrompt string) (map[string]interface{}, error) {
+	
+	// 🛡️ 1. KORUMA KALKANI: BOŞ MESAJ KONTROLÜ
+	// Eğer kullanıcı hiçbir şey demediyse veya boşluk gönderdiyse işlem yapma.
+	if len(strings.TrimSpace(userPrompt)) < 2 {
+		fmt.Println("⚠️ Uyarı: Boş mesaj geldi, AI çağrısı iptal edildi.")
+		// Varsayılan boş bir JSON dönelim ki frontend patlamasın
+		return map[string]interface{}{
+			"error": "Lütfen bir komut söyleyin.",
+		}, nil
+	}
+
+	// DeepSeek Sistem Mesajı (Prompt Engineering)
+	systemPrompt := `
+	You are Sonic Uni-Agent, a DeFi voice assistant.
+	Analyze the user's intent and return a JSON object.
+	
+	Supported Chains: "SEPOLIA", "SUI NET", "ETHEREUM".
+	Supported Tokens: "USDC", "ETH", "SUI".
+	
+	Example Input: "Bridge 100 USDC to Sui"
+	Example Output JSON:
+	{
+		"action": "BRIDGE ASSETS",
+		"source_chain": "SEPOLIA",
+		"target_chain": "SUI NET",
+		"amount": "100",
+		"token_in": "USDC",
+		"original_text": "Bridge 100 USDC to Sui"
+	}
+
+	If the input is irrelevant, return {"action": "UNKNOWN"}.
+	Return ONLY JSON. No markdown.
+	`
+
+	requestBody := OpenAIChatRequest{
+		Model: "deepseek-chat", // Veya "gpt-3.5-turbo"
+		Messages: []Message{
+			{Role: "system", Content: systemPrompt},
+			{Role: "user", Content: userPrompt},
+		},
+	}
+
+	jsonData, _ := json.Marshal(requestBody)
+
+	req, err := http.NewRequest("POST", "https://api.deepseek.com/chat/completions", bytes.NewBuffer(jsonData))
+	if err != nil {
 		return nil, err
 	}
 
-	return &intent, nil
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+
+	fmt.Printf("🤖 [AI] Analyzing: %s\n", userPrompt)
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	// Yanıtı Oku
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != 200 {
+		fmt.Printf("❌ OpenAI Error: %s\n", string(body))
+		return nil, fmt.Errorf("AI Provider Error: %d", resp.StatusCode)
+	}
+
+	var aiResponse OpenAIResponse
+	if err := json.Unmarshal(body, &aiResponse); err != nil {
+		return nil, err
+	}
+
+	if len(aiResponse.Choices) == 0 {
+		return nil, fmt.Errorf("AI boş yanıt döndü")
+	}
+
+	// Gelen string JSON'ı map'e çevir (Frontend'in anlaması için)
+	rawContent := aiResponse.Choices[0].Message.Content
+	
+	// Markdown temizliği (Bazen ```json ... ``` şeklinde döner)
+	rawContent = strings.TrimPrefix(rawContent, "```json")
+	rawContent = strings.TrimSuffix(rawContent, "```")
+	rawContent = strings.TrimSpace(rawContent)
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(rawContent), &result); err != nil {
+		fmt.Println("⚠️ AI JSON döndürmedi, düz metin geldi:", rawContent)
+		// Fallback (Yedek) Yanıt
+		return map[string]interface{}{
+			"action": "UNKNOWN",
+			"original_text": userPrompt,
+		}, nil
+	}
+
+	return result, nil
 }
