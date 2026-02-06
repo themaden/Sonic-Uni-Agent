@@ -1,65 +1,85 @@
-import { useState, useEffect } from "react";
-import { Terminal } from "lucide-react";
+import { useState, useEffect } from 'react';
+import { Terminal, Brain, Cpu, Shield, Globe } from 'lucide-react';
 
-export default function LiveLogs({ status }: { status: string }) {
-  const [logs, setLogs] = useState<any[]>([]);
+interface Log {
+  id: string;
+  msg: string;
+  type: 'ai' | 'engine' | 'security' | 'network';
+  timestamp: string;
+}
 
+export default function LiveLogs() {
+  const [logs, setLogs] = useState<Log[]>([]);
+
+  const addLog = (msg: string, type: Log['type']) => {
+    const newLog: Log = {
+      id: Math.random().toString(36).substr(2, 9),
+      msg,
+      type,
+      timestamp: new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    };
+    setLogs(prev => [newLog, ...prev].slice(0, 5));
+  };
+
+  // Simulation logic for Demo
   useEffect(() => {
-    if (status === 'idle') {
-      setLogs([]);
-    } else if (status === 'listening') {
-      setLogs([
-        { time: new Date().toLocaleTimeString(), text: 'Microphone initialized.', color: 'text-gray-500' },
-        { time: new Date().toLocaleTimeString(), text: '> Listening for "Hey Sonic"...', color: 'text-sonic-cyan' },
-      ]);
-    } else if (status === 'processing') {
-      // Step-by-step logs for effect
-      setLogs([]); // Clear first
+    const messages = [
+      { m: "Neural Engine: Listening for wake word...", t: 'ai' as const },
+      { m: "Intent Engine: Analyzing natural language...", t: 'ai' as const },
+      { m: "Route Optimizer: Querying LI.FI for best bridge...", t: 'network' as const },
+      { m: "ZK-Vault: Generating biometric proof...", t: 'security' as const },
+      { m: "Hook Manager: Injecting JIT liquidity...", t: 'engine' as const },
+    ];
 
-      const steps = [
-        { text: '[AI] Analyzing Voice Intent...', color: 'text-sonic-purple', delay: 500 },
-        { text: '[NLP] Extracted: Bridge 100 USDC', color: 'text-blue-400', delay: 1500 },
-        { text: '[GO] Fetching Best Route...', color: 'text-yellow-400', delay: 2500 },
-        { text: '[ZK] Verifying User Identity...', color: 'text-green-400', delay: 3500 },
-        { text: '>> Ready for Execution', color: 'text-white', delay: 4500 },
-      ];
+    let i = 0;
+    const interval = setInterval(() => {
+      addLog(messages[i % messages.length].m, messages[i % messages.length].t);
+      i++;
+    }, 4000);
 
-      steps.forEach((step, index) => {
-        setTimeout(() => {
-          setLogs(prev => [...prev, {
-            time: new Date().toLocaleTimeString(),
-            text: step.text,
-            color: step.color
-          }]);
-        }, step.delay);
-      });
-    }
-  }, [status]);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <div className="absolute bottom-8 right-8 w-96 bg-sonic-card/90 border border-gray-800 rounded-lg p-4 font-mono text-xs shadow-2xl backdrop-blur-md hidden md:block">
-      <div className="flex items-center justify-between mb-3 border-b border-gray-800 pb-2">
-        <div className="flex items-center gap-2 text-gray-400">
-          <Terminal size={14} />
-          <span className="uppercase tracking-wider">Live Execution Logs</span>
+    <div className="fixed bottom-6 right-6 w-80 bg-black/90 border border-white/10 rounded-xl overflow-hidden shadow-2xl backdrop-blur-xl z-40 hidden md:block">
+      <div className="bg-white/5 p-3 border-b border-white/10 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Terminal size={14} className="text-sonic-cyan" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Live Agent Logs</span>
         </div>
         <div className="flex gap-1">
-          <div className="w-2 h-2 rounded-full bg-gray-600"></div>
-          <div className="w-2 h-2 rounded-full bg-gray-600"></div>
+          <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
         </div>
       </div>
 
-      <div className="space-y-2 h-40 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700">
-        {logs.map((log, i) => (
-          <div key={i} className="flex gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
-            <span className="text-gray-600 opacity-50">[{log.time.split(' ')[0]}]</span>
-            <span className={log.color}>{log.text}</span>
+      <div className="p-4 space-y-3 h-48 overflow-y-auto font-mono text-[9px]">
+        {logs.map(log => (
+          <div key={log.id} className="flex gap-3 animate-in slide-in-from-right-2 duration-300">
+            <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
+            <div className="flex items-start gap-2">
+              {log.type === 'ai' && <Brain size={10} className="mt-0.5 text-purple-400" />}
+              {log.type === 'security' && <Shield size={10} className="mt-0.5 text-blue-400" />}
+              {log.type === 'network' && <Globe size={10} className="mt-0.5 text-orange-400" />}
+              {log.type === 'engine' && <Cpu size={10} className="mt-0.5 text-sonic-cyan" />}
+
+              <span className={
+                log.type === 'ai' ? 'text-purple-300' :
+                  log.type === 'security' ? 'text-blue-300' :
+                    log.type === 'network' ? 'text-orange-300' : 'text-cyan-300'
+              }>
+                {log.msg}
+              </span>
+            </div>
           </div>
         ))}
-        {status === 'processing' && logs.length < 5 && (
-          <div className="w-2 h-4 bg-sonic-cyan animate-pulse mt-1"></div>
+        {logs.length === 0 && (
+          <p className="text-gray-700 italic">Initializing agent telemetry...</p>
         )}
       </div>
+
+      <div className="bg-sonic-cyan/10 p-2 text-center border-t border-sonic-cyan/20">
+        <p className="text-[8px] text-sonic-cyan font-bold tracking-tighter uppercase">Sonic OS v1.0.4 - Telemetry Active</p>
+      </div>
     </div>
-  )
-};
+  );
+}

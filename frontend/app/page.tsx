@@ -6,12 +6,15 @@ import { parseEther } from 'viem';
 import VoiceInput from '@/src/components/VoiceInput';
 import TransactionModal from '@/src/components/TransactionModal';
 import ConnectWallet from '@/src/components/ConnectWallet';
-import { resolveENSProfile } from '@/src/utils/ens'; // Ensure this path is correct
+import { resolveENSProfile } from '@/src/utils/ens';
+import LiveLogs from '@/src/components/LiveLogs';
 
 export default function Home() {
   const [intent, setIntent] = useState<any>(null);
+  // ... rest of the component
   const [status, setStatus] = useState<'idle' | 'listening' | 'processing'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   const { address } = useAccount();
   const { sendTransaction } = useSendTransaction();
@@ -25,6 +28,7 @@ export default function Home() {
     }
 
     setErrorMsg('');
+    setTxHash(null);
     setStatus('processing');
 
     try {
@@ -65,6 +69,30 @@ export default function Home() {
         console.log("✅ Direct Address Detected:", recipientAddress);
         recipientName = recipientAddress.slice(0, 6) + "..." + recipientAddress.slice(-4);
       }
+
+      // --- HACKATHON DEMO MAPPING (FOR PRESENTATION) ---
+      const demoMapping: Record<string, { name: string, avatar: string }> = {
+        'vitalik': {
+          name: 'vitalik.eth',
+          avatar: 'https://metadata.ens.domains/mainnet/avatar/vitalik.eth'
+        },
+        'maden': {
+          name: 'Maden (Agent Owner)',
+          avatar: 'https://avatars.githubusercontent.com/u/12345678?v=4'
+        },
+        'sonic': {
+          name: 'Sonic Uni-Agent',
+          avatar: '/images/success_3d.png'
+        }
+      };
+
+      const lowerText = text.toLowerCase();
+      Object.keys(demoMapping).forEach(key => {
+        if (lowerText.includes(key)) {
+          recipientName = demoMapping[key].name;
+          recipientAvatar = demoMapping[key].avatar;
+        }
+      });
       // --- RECIPIENT & ENS INTEGRATION END ---
 
       // Prepare Data for Modal
@@ -112,8 +140,8 @@ export default function Home() {
       }, {
         onSuccess: (hash) => {
           console.log("Transaction Sent:", hash);
-          alert(`Transaction Sent! Hash: ${hash}`);
-          setIntent(null);
+          setTxHash(hash);
+          // Don't set intent to null, so modal stays open with Success UI
         },
         onError: (error) => {
           console.error("Tx Error:", error);
@@ -128,11 +156,15 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-black text-white selection:bg-sonic-cyan selection:text-black font-sans overflow-hidden relative">
+    <main className={`min-h-screen transition-colors duration-1000 ${status === 'listening' ? 'bg-cyan-950/20' : 'bg-black'} text-white selection:bg-sonic-cyan selection:text-black font-sans overflow-hidden relative`}>
 
       {/* Background Glow */}
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] bg-sonic-cyan/20 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className={`absolute top-[-20%] left-[-10%] w-[500px] h-[500px] transition-all duration-1000 ${status === 'listening' ? 'bg-sonic-cyan/40 scale-150' : 'bg-sonic-cyan/20'} rounded-full blur-[120px] pointer-events-none`}></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] bg-purple-900/20 rounded-full blur-[120px] pointer-events-none"></div>
+
+      {status === 'listening' && (
+        <div className="absolute inset-0 bg-sonic-cyan/5 animate-pulse pointer-events-none z-0"></div>
+      )}
 
       {/* Navbar */}
       <nav className="flex justify-between items-center p-6 relative z-10 border-b border-white/10 backdrop-blur-md">
@@ -199,9 +231,14 @@ export default function Home() {
       {/* Transaction Modal */}
       <TransactionModal
         intent={intent}
+        txHash={txHash}
         onConfirm={executeTransaction}
-        onCancel={() => setIntent(null)}
+        onCancel={() => {
+          setIntent(null);
+          setTxHash(null);
+        }}
       />
+      <LiveLogs />
     </main>
   );
 }

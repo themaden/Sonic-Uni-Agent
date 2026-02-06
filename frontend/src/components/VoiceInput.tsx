@@ -22,10 +22,12 @@ export default function VoiceInput({ onIntentDetected, status, setStatus }: Voic
 
     // RE-ACTIVATE MICROPHONE LOOP WHEN BACK TO IDLE
     if (status === 'idle' && isSystemActive && recognitionRef.current) {
-      try {
-        recognitionRef.current.start();
-        console.log("🎤 Engine Restarted (Idle Mode)");
-      } catch (e) { /* Already running */ }
+      setTimeout(() => {
+        try {
+          recognitionRef.current.start();
+          console.log("🎤 Engine Restarted (Status change to Idle)");
+        } catch (e) { /* Already running */ }
+      }, 500);
     }
   }, [status, isSystemActive]);
 
@@ -87,50 +89,88 @@ export default function VoiceInput({ onIntentDetected, status, setStatus }: Voic
 
       setTranscript(lowerTranscript);
 
-      // MODE 1: WAKE WITH "HEY SONIC"
-      // Only if in 'idle' mode and 'hey sonic' is heard
-      if (statusRef.current === 'idle' && (
-        lowerTranscript.includes('hey sonic') ||
-        lowerTranscript.includes('sonic') ||
-        lowerTranscript.includes('sonik') ||
-        lowerTranscript.includes('sonıc') // Turkish accent support for "Sonic"
-      )) {
-        playSound('wake');
-        setStatus('listening');
-        speak("Listening.");
+      // --- IMPROVED LOGIC: WAKE WORD & COMMAND IN ONE GO ---
+      const wakeWords = ['hey sonic', 'sonic', 'sonik', 'sonıc', 'hey sonik', 'hey sonıc', 'hi sonic', 'ay sonic', 'hey soni'];
+
+      if (statusRef.current === 'idle') {
+        const foundWake = wakeWords.some(w => lowerTranscript.includes(w));
+        if (foundWake) {
+          console.log("🎯 Wake Word Detected:", lowerTranscript);
+          playSound('wake');
+          setStatus('listening');
+          statusRef.current = 'listening'; // Update Ref Immediately!
+          speak("Listening.");
+        }
       }
 
-      // MODE 2: COMMAND CAPTURE
-      // If in 'listening' mode (either manual or voice-activated)
+      // MODE: COMMAND CAPTURE (Either already listening OR just woken up)
       if (statusRef.current === 'listening') {
         if (silenceTimer.current) clearTimeout(silenceTimer.current);
 
-        const command = currentTranscript.replace(/hey sonic|sonic|sonik|sonıc/gi, '').trim();
+        // Normalize command by removing wake words
+        let command = lowerTranscript;
+        wakeWords.forEach(w => {
+          command = command.replace(new RegExp(w, 'gi'), '');
+        });
+        command = command.trim();
+
+        // 🛡️ Filter common background noise/single words
+        if (command.length < 2) return;
+
+        console.log("🗣️ Capturing Command:", command);
 
         // Send after 1.5 seconds of silence
         silenceTimer.current = setTimeout(() => {
-          if (command.length > 5) {
+          if (command.length > 3) {
+            console.log("🚀 Executing Command:", command);
             playSound('success');
             setStatus('processing');
-            recognition.stop();
+            statusRef.current = 'processing';
+
+            try {
+              recognitionRef.current.stop();
+              console.log("🎤 Stopping engine for processing...");
+            } catch (e) { }
+
             onIntentDetected(command);
-            speak("On it.");
+            speak("Processing.");
             setTranscript('');
           }
         }, 1500);
       }
     };
 
+    recognition.onerror = (event: any) => {
+      console.error("🎤 Engine Error:", event.error);
+      if (event.error === 'network') speak("Network error.");
+      if (event.error === 'not-allowed') {
+        speak("Microphone access denied.");
+        setIsSystemActive(false);
+      }
+    };
+
     recognition.onend = () => {
-      // If not processing, keep engine open (Always Listen)
-      if (statusRef.current !== 'processing') {
-        try { recognition.start(); } catch (e) { }
+      console.log("🎤 Engine Stopped (onend). Status:", statusRef.current);
+      // Only restart if we are NOT processing and system is still supposed to be active
+      if (statusRef.current !== 'processing' && isSystemActive) {
+        setTimeout(() => {
+          try {
+            if (recognitionRef.current && isSystemActive) {
+              recognitionRef.current.start();
+              console.log("🎤 Engine Restarted automatically");
+            }
+          } catch (e) { }
+        }, 500);
       }
     };
 
     recognitionRef.current = recognition;
-    recognition.start();
-    setIsActive(true);
+    try {
+      recognition.start();
+      setIsSystemActive(true);
+    } catch (e) {
+      console.error("🎤 Start Error:", e);
+    }
   };
 
   // 🔘 WHAT HAPPENS ON BUTTON CLICK?
