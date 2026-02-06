@@ -58,7 +58,13 @@ go run cmd/api/main.go
 npm install
 npm run dev
 # Open http://localhost:3000
-🚧 Development Status (HackMoney Sprint)ModuleStatusDescriptionSmart Contracts (ETH)✅ CompletedUniswap v4 Hook skeleton & interface setup.Smart Contracts (Sui)✅ CompletedMove gateway for intent emission & burning.Backend (Go)✅ CompletedFiber Server, AI Intent Engine & Yellow Solver Logic.ZK Circuits (Noir)✅ CompletedVoice authentication circuits.Frontend✅ CompletedVoice UI, ENS Resolution, Transaction Modal.🧪 Running TestsSui Contracts:Bashcd contracts-sui
+🚧 Development Status (HackMoney Sprint)ModuleStatusDescriptionSmart Contracts (ETH)
+✅ CompletedUniswap v4 Hook skeleton & interface setup.Smart Contracts (Sui)
+✅ CompletedMove gateway for intent emission & burning.Backend (Go)
+✅ CompletedFiber Server, AI Intent Engine & Yellow Solver Logic.ZK Circuits (Noir)
+✅ CompletedVoice authentication circuits.Frontend
+✅ CompletedVoice UI, ENS Resolution, Transaction Modal.
+🧪 Running TestsSui Contracts:Bashcd contracts-sui
 sui move test
 Go Backend:Bashcd backend-go
 go test ./...
